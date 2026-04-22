@@ -36,3 +36,5 @@ backend/arbitrage.db
 
 # OS
 .DS_Store
+
+backend/rust-engine/target/
