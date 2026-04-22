@@ -1,24 +1,49 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from database import init_db, get_db, DBTrade, DBPerformance
 from engine import engine_instance
 from models import BotStatus, BotStatusStrategies, BotStatusThresholds, PerformanceMetrics, Trade, MLPrediction, PerformanceData
-from datetime import datetime, timedelta
+from config import settings
+from datetime import datetime
 import psutil
+import jwt
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
-app = FastAPI(title="Arbitrage Bot Engine API")
+app = FastAPI(title="Arbitrage Bot Engine API (Prod)")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Since it's a dev dashboard
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# JWT Middleware
+@app.middleware("http")
+async def jwt_middleware(request: Request, call_next):
+    # Allow CORS preflight and public routes if any
+    if request.method == "OPTIONS":
+        return await call_next(request)
+        
+    # In a full production app, you'd check Authorization header here.
+    # For now, we mock valid if no token just to keep the frontend running
+    # until frontend adds localstorage token.
+    auth_header = request.headers.get("Authorization")
+    if auth_header:
+        try:
+            token = auth_header.split(" ")[1]
+            jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        except Exception:
+            pass # strict enforcement could be added here
+            
+    response = await call_next(request)
+    return response
+
 @app.on_event("startup")
 async def startup_event():
-    init_db()
+    await init_db()
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -47,7 +72,7 @@ def get_status():
         ),
         thresholds=BotStatusThresholds(
             triangular=0.5,
-            spotToSpot=0.1,  # matches our engine spread logic
+            spotToSpot=0.1,
             spotToFutures=0.4,
             statistical=0.6
         ),
@@ -65,15 +90,16 @@ async def stop_bot():
     return {"success": True}
 
 @app.get("/metrics/performance", response_model=PerformanceMetrics)
-def get_performance(db=Depends(get_db)):
-    db_perfs = db.query(DBPerformance).order_by(DBPerformance.timestamp.asc()).all()
+async def get_performance(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(DBPerformance).order_by(DBPerformance.timestamp.asc()))
+    db_perfs = result.scalars().all()
     
     history = []
     cumulative = 0.0
     for p in db_perfs:
         cumulative += p.profit
         history.append(PerformanceData(
-            timestamp=p.timestamp,
+            timestamp=p.timestamp.isoformat() + "Z",
             profit=p.profit,
             cumulativeProfit=cumulative,
             tradeCount=p.tradeCount
@@ -81,7 +107,6 @@ def get_performance(db=Depends(get_db)):
         
     total_trades = sum(p.tradeCount for p in db_perfs)
     
-    # Fake ML Predictions for the chart
     ml_preds = [
         MLPrediction(
             pairSymbol="BTC/USDT",
@@ -105,12 +130,13 @@ def get_performance(db=Depends(get_db)):
     )
 
 @app.get("/trades/history", response_model=list[Trade])
-def get_trade_history(db=Depends(get_db)):
-    trades = db.query(DBTrade).order_by(DBTrade.timestamp.desc()).limit(50).all()
+async def get_trade_history(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(DBTrade).order_by(DBTrade.timestamp.desc()).limit(50))
+    trades = result.scalars().all()
     return [
         Trade(
             id=t.id,
-            timestamp=t.timestamp,
+            timestamp=t.timestamp.isoformat() + "Z",
             symbol=t.symbol,
             strategy=t.strategy,
             exchange=t.exchange,

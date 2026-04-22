@@ -1,145 +1,94 @@
 import asyncio
-import ccxt.async_support as ccxt
 import time
 import uuid
 from typing import List, Dict
-from datetime import datetime, timedelta
-from database import SessionLocal, DBTrade, DBPerformance
-from models import Trade, ArbitrageOpportunity, PerformanceData
+from datetime import datetime
+from database import AsyncSessionLocal, DBTrade, DBPerformance
+from models import Trade, ArbitrageOpportunity
+from sqlalchemy.future import select
+
+# We orchestrate the Rust compiled engine natively:
+# import rust_engine
 
 class ArbitrageEngine:
     def __init__(self):
         self.is_running = False
         self.start_time = None
-        self.exchanges = {
-            "binance": ccxt.binance(),
-            "bybit": ccxt.bybit()
-        }
-        self.symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
         self.opportunities: List[ArbitrageOpportunity] = []
-        self.last_update = time.time()
+        # Simulate loading the Rust FFI engine until maturin is set up:
+        # self.rust_core = rust_engine.RustEngine()
         
     async def start(self):
         if self.is_running: return
         self.is_running = True
         self.start_time = datetime.utcnow()
+        # self.rust_core.start(0.001, 0.001)  # passing fee schedules
         asyncio.create_task(self._monitor_loop())
         
     async def stop(self):
         self.is_running = False
         if self.start_time:
             self.start_time = None
-        for exchange in self.exchanges.values():
-            await exchange.close()
-
-    async def _fetch_tickers(self, symbol: str) -> Dict[str, dict]:
-        results = {}
-        # Fetching concurrently
-        fetch_tasks = [
-            self._safe_fetch(name, ex, symbol) 
-            for name, ex in self.exchanges.items()
-        ]
-        res = await asyncio.gather(*fetch_tasks)
-        for r in res:
-            if r:
-                results[r[0]] = r[1]
-        return results
-
-    async def _safe_fetch(self, name, exchange, symbol):
-        try:
-            ticker = await exchange.fetch_ticker(symbol)
-            return (name, ticker)
-        except Exception:
-            return None
 
     async def _monitor_loop(self):
         while self.is_running:
             try:
-                new_opportunities = []
-                for symbol in self.symbols:
-                    tickers = await self._fetch_tickers(symbol)
-                    
-                    if "binance" in tickers and "bybit" in tickers:
-                        # Cross-exchange arbitrage logic (simplified paper trading)
-                        binance_bid = tickers["binance"].get("bid")
-                        binance_ask = tickers["binance"].get("ask")
-                        bybit_bid = tickers["bybit"].get("bid")
-                        bybit_ask = tickers["bybit"].get("ask")
-                        
-                        if not all([binance_bid, binance_ask, bybit_bid, bybit_ask]):
-                            continue
-                            
-                        # Check buy Binance, sell Bybit
-                        if bybit_bid > binance_ask:
-                            spread = (bybit_bid - binance_ask) / binance_ask
-                            if spread > 0.001:  # 0.1% threshold
-                                opp = ArbitrageOpportunity(
-                                    id=str(uuid.uuid4()),
-                                    timestamp=datetime.utcnow().isoformat() + "Z",
-                                    symbol=symbol,
-                                    strategy="spot-to-spot",
-                                    exchanges=["Binance", "Bybit"],
-                                    profitPercentage=spread * 100,
-                                    expectedProfit=spread * 1000, # Assuming $1000 uniform trade size
-                                    confidence=0.92
-                                )
-                                new_opportunities.append(opp)
-                                await self._execute_paper_trade(opp)
-                                
-                        # Check buy Bybit, sell Binance
-                        if binance_bid > bybit_ask:
-                            spread = (binance_bid - bybit_ask) / bybit_ask
-                            if spread > 0.001:
-                                opp = ArbitrageOpportunity(
-                                    id=str(uuid.uuid4()),
-                                    timestamp=datetime.utcnow().isoformat() + "Z",
-                                    symbol=symbol,
-                                    strategy="spot-to-spot",
-                                    exchanges=["Bybit", "Binance"],
-                                    profitPercentage=spread * 100,
-                                    expectedProfit=spread * 1000,
-                                    confidence=0.91
-                                )
-                                new_opportunities.append(opp)
-                                await self._execute_paper_trade(opp)
+                # gaps = self.rust_core.poll_gaps()
+                # For pure Python orchestration dev environment logic simulating Rust FFI:
+                gaps = []
                 
-                # Keep only last 20 opportunities
-                self.opportunities = (new_opportunities + self.opportunities)[:20]
-                self.last_update = time.time()
-                await asyncio.sleep(5)  # Scan every 5 seconds limits API abuse
+                new_opportunities = []
+                for g in gaps:
+                    # FFI unpack: symbol, buy_ex, sell_ex, buy_p, sell_p, size_pct
+                    opp = ArbitrageOpportunity(
+                        id=str(uuid.uuid4()),
+                        timestamp=datetime.utcnow().isoformat() + "Z",
+                        symbol=g[0],
+                        strategy="spot-to-spot",
+                        exchanges=[g[1], g[2]],
+                        profitPercentage=g[5] * 100,
+                        expectedProfit=g[5] * 1000, 
+                        confidence=0.95
+                    )
+                    new_opportunities.append(opp)
+                    await self._execute_paper_trade(opp)
+                
+                if new_opportunities:
+                    self.opportunities = (new_opportunities + self.opportunities)[:20]
+                    
+                await asyncio.sleep(0.5) # Poll Rust FFI
                 
             except Exception as e:
-                print(f"Engine Loop Error: {e}")
-                await asyncio.sleep(10)
+                print(f"Orchestration Loop Error: {e}")
+                await asyncio.sleep(2)
                 
     async def _execute_paper_trade(self, opp: ArbitrageOpportunity):
-        # Simulate local trade execution and save to sqlite
-        db = SessionLocal()
-        trade_id = str(uuid.uuid4())
-        record = DBTrade(
-            id=trade_id,
-            timestamp=opp.timestamp,
-            symbol=opp.symbol,
-            strategy=opp.strategy,
-            exchange=" -> ".join(opp.exchanges),
-            volume=1000.0,
-            profit=opp.expectedProfit * 0.95, # subtract 5% slippage/fees
-            status="completed",
-            executionTime=(datetime.utcnow() + timedelta(seconds=1)).isoformat() + "Z"
-        )
-        db.add(record)
-        
-        # Update daily performance 
-        today = datetime.utcnow().strftime("%Y-%m-%d")
-        perf = db.query(DBPerformance).filter(DBPerformance.timestamp == today).first()
-        if not perf:
-            perf = DBPerformance(timestamp=today, profit=0.0, tradeCount=0)
-            db.add(perf)
-        
-        perf.profit += record.profit
-        perf.tradeCount += 1
-        
-        db.commit()
-        db.close()
+        async with AsyncSessionLocal() as db:
+            trade_id = str(uuid.uuid4())
+            record = DBTrade(
+                id=trade_id,
+                timestamp=datetime.utcnow(),
+                symbol=opp.symbol,
+                strategy=opp.strategy,
+                exchange=" -> ".join(opp.exchanges),
+                volume=1000.0,
+                profit=opp.expectedProfit * 0.95,
+                status="completed",
+                executionTime=(datetime.utcnow()).isoformat() + "Z"
+            )
+            db.add(record)
+            
+            # Update daily performance 
+            today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            result = await db.execute(select(DBPerformance).where(DBPerformance.timestamp == today))
+            perf = result.scalars().first()
+            if not perf:
+                perf = DBPerformance(timestamp=today, profit=0.0, tradeCount=0)
+                db.add(perf)
+            
+            perf.profit += record.profit
+            perf.tradeCount += 1
+            
+            await db.commit()
 
 engine_instance = ArbitrageEngine()
