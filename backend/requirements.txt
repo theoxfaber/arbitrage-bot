@@ -10,3 +10,4 @@ PyJWT==2.8.0
 scikit-learn==1.4.0
 pandas==2.2.0
 numpy==1.26.3
+maturin==1.4.0

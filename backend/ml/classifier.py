@@ -35,9 +35,15 @@ class GapClassifier:
         self.model.fit(X, y)
         self.is_trained = True
 
-    def predict_confidence(self, gap_data: dict) -> float:
-        if not self.is_trained:
-            return 0.5
+    def predict_confidence(self, gap_data: dict, history_count: int = 0) -> float:
+        from config import settings
+        
+        # If we have less than 100 logged trades, the RandomForest will perform terribly.
+        # Fallback to a hardcoded deterministic threshold filter:
+        if history_count < 100 or not self.is_trained:
+            size_pct = gap_data.get("size_pct", 0)
+            # Hardcoded heuristic: If size is exceptionally strong, give 1.0 confidence, else 0.0
+            return 1.0 if size_pct > (settings.MIN_CONFIDENCE / 100) else 0.0
             
         features = self.extract_features(gap_data)
         probabilities = self.model.predict_proba(features)

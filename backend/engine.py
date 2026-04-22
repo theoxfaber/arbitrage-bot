@@ -12,20 +12,21 @@ from sqlalchemy.future import select
 
 from ml.classifier import classifier_instance
 from config import settings
+import rust_engine
 
 class ArbitrageEngine:
     def __init__(self):
         self.is_running = False
         self.start_time = None
         self.opportunities: List[ArbitrageOpportunity] = []
-        # Simulate loading the Rust FFI engine until maturin is set up:
-        # self.rust_core = rust_engine.RustEngine()
+        # Native compiled FFI hook:
+        self.rust_core = rust_engine.RustEngine()
         
     async def start(self):
         if self.is_running: return
         self.is_running = True
         self.start_time = datetime.utcnow()
-        # self.rust_core.start(0.001, 0.001)  # passing fee schedules
+        self.rust_core.start(0.001, 0.001)  # passing fee schedules
         asyncio.create_task(self._monitor_loop())
         
     async def stop(self):
@@ -36,9 +37,7 @@ class ArbitrageEngine:
     async def _monitor_loop(self):
         while self.is_running:
             try:
-                # gaps = self.rust_core.poll_gaps()
-                # For pure Python orchestration dev environment logic simulating Rust FFI:
-                gaps = [("BTC/USDT", "Binance", "Bybit", 60000, 60100, 0.0016)]
+                gaps = self.rust_core.poll_gaps()
                 
                 from regime import regime_detector
                 # Simulated dynamic regime update
@@ -57,7 +56,7 @@ class ArbitrageEngine:
                         "duration": 600,
                         "depth": 50.0,
                         "volume": 20.0
-                    })
+                    }, history_count=getattr(self, 'history_count', 0))
                     
                     if confidence >= settings.MIN_CONFIDENCE:
                         # We inject explanation here into the opp dict for passing it down
