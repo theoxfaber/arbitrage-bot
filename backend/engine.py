@@ -60,6 +60,19 @@ class ArbitrageEngine:
                     })
                     
                     if confidence >= settings.MIN_CONFIDENCE:
+                        # We inject explanation here into the opp dict for passing it down
+                        opp_dict = {
+                            "symbol": g[0],
+                            "buy_exchange": g[1],
+                            "sell_exchange": g[2],
+                            "size_pct": g[5] * 100,
+                            "expectedProfit": g[5] * 1000,
+                            "duration": 600
+                        }
+                        
+                        from explainer import generate_explanation
+                        explanation = generate_explanation(opp_dict, confidence, reg_status["regime"])
+                        
                         opp = ArbitrageOpportunity(
                             id=str(uuid.uuid4()),
                             timestamp=datetime.utcnow().isoformat() + "Z",
@@ -70,9 +83,9 @@ class ArbitrageEngine:
                             expectedProfit=g[5] * 1000, 
                             confidence=confidence
                         )
+                        # Normally we add it to a trade queue, here we attach dynamic explanations for DB
                         new_opportunities.append(opp)
-                        await self._execute_paper_trade(opp)
-
+                        await self._execute_paper_trade(opp, explanation)
                 
                 if new_opportunities:
                     self.opportunities = (new_opportunities + self.opportunities)[:20]
@@ -83,7 +96,7 @@ class ArbitrageEngine:
                 print(f"Orchestration Loop Error: {e}")
                 await asyncio.sleep(2)
                 
-    async def _execute_paper_trade(self, opp: ArbitrageOpportunity):
+    async def _execute_paper_trade(self, opp: ArbitrageOpportunity, explanation: str = ""):
         async with AsyncSessionLocal() as db:
             trade_id = str(uuid.uuid4())
             record = DBTrade(
@@ -95,7 +108,8 @@ class ArbitrageEngine:
                 volume=1000.0,
                 profit=opp.expectedProfit * 0.95,
                 status="completed",
-                executionTime=(datetime.utcnow()).isoformat() + "Z"
+                executionTime=(datetime.utcnow()).isoformat() + "Z",
+                explanation=explanation
             )
             db.add(record)
             

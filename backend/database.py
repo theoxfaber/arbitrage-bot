@@ -20,6 +20,7 @@ class DBTrade(Base):
     profit = Column(Float)
     status = Column(String)
     executionTime = Column(String)
+    explanation = Column(String)
 
 class DBPerformance(Base):
     __tablename__ = "performance"

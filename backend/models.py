@@ -58,6 +58,7 @@ class Trade(BaseModel):
     profit: float
     status: str
     executionTime: str
+    explanation: Optional[str] = None
 
 class ArbitrageOpportunity(BaseModel):
     id: str
