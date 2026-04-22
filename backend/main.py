@@ -155,3 +155,21 @@ def get_opportunities():
 def get_regime():
     from regime import regime_detector
     return regime_detector.get_regime()
+
+from fastapi import WebSocket
+import asyncio
+
+@app.websocket("/ws/feed")
+async def websocket_feed(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            # Pushing real-time gaps down the websocket, bypassing axios polling entirely
+            ops = [o.model_dump() for o in engine_instance.opportunities]
+            await websocket.send_json({
+                "type": "opportunities",
+                "payload": ops
+            })
+            await asyncio.sleep(1)
+    except Exception:
+        pass
