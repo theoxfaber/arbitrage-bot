@@ -10,6 +10,9 @@ from sqlalchemy.future import select
 # We orchestrate the Rust compiled engine natively:
 # import rust_engine
 
+from ml.classifier import classifier_instance
+from config import settings
+
 class ArbitrageEngine:
     def __init__(self):
         self.is_running = False
@@ -35,23 +38,31 @@ class ArbitrageEngine:
             try:
                 # gaps = self.rust_core.poll_gaps()
                 # For pure Python orchestration dev environment logic simulating Rust FFI:
-                gaps = []
+                gaps = [("BTC/USDT", "Binance", "Bybit", 60000, 60100, 0.0016)]
                 
                 new_opportunities = []
                 for g in gaps:
-                    # FFI unpack: symbol, buy_ex, sell_ex, buy_p, sell_p, size_pct
-                    opp = ArbitrageOpportunity(
-                        id=str(uuid.uuid4()),
-                        timestamp=datetime.utcnow().isoformat() + "Z",
-                        symbol=g[0],
-                        strategy="spot-to-spot",
-                        exchanges=[g[1], g[2]],
-                        profitPercentage=g[5] * 100,
-                        expectedProfit=g[5] * 1000, 
-                        confidence=0.95
-                    )
-                    new_opportunities.append(opp)
-                    await self._execute_paper_trade(opp)
+                    confidence = classifier_instance.predict_confidence({
+                        "size_pct": g[5] * 100,
+                        "duration": 600,
+                        "depth": 50.0,
+                        "volume": 20.0
+                    })
+                    
+                    if confidence >= settings.MIN_CONFIDENCE:
+                        opp = ArbitrageOpportunity(
+                            id=str(uuid.uuid4()),
+                            timestamp=datetime.utcnow().isoformat() + "Z",
+                            symbol=g[0],
+                            strategy="spot-to-spot",
+                            exchanges=[g[1], g[2]],
+                            profitPercentage=g[5] * 100,
+                            expectedProfit=g[5] * 1000, 
+                            confidence=confidence
+                        )
+                        new_opportunities.append(opp)
+                        await self._execute_paper_trade(opp)
+
                 
                 if new_opportunities:
                     self.opportunities = (new_opportunities + self.opportunities)[:20]
