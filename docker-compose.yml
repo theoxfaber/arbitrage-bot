@@ -1,11 +1,29 @@
 version: '3.8'
 
 services:
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: arbitrage
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    restart: always
+
   backend:
     build:
       context: ./backend
     ports:
       - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:password@postgres:5432/arbitrage
+      - JWT_SECRET_KEY=super_secret_for_dev_only
+      - MIN_CONFIDENCE=0.85
+    depends_on:
+      - postgres
     restart: always
 
   frontend:
@@ -18,3 +36,6 @@ services:
     depends_on:
       - backend
     restart: always
+
+volumes:
+  timescale_data:
