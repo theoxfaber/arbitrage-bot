@@ -150,3 +150,8 @@ async def get_trade_history(db: AsyncSession = Depends(get_db)):
 @app.get("/arbitrage/opportunities")
 def get_opportunities():
     return engine_instance.opportunities
+
+@app.get("/regime")
+def get_regime():
+    from regime import regime_detector
+    return regime_detector.get_regime()

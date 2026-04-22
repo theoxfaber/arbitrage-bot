@@ -40,6 +40,16 @@ class ArbitrageEngine:
                 # For pure Python orchestration dev environment logic simulating Rust FFI:
                 gaps = [("BTC/USDT", "Binance", "Bybit", 60000, 60100, 0.0016)]
                 
+                from regime import regime_detector
+                # Simulated dynamic regime update
+                import random
+                regime_detector.update_market_data(random.uniform(0.1, 1.8), random.uniform(0.1, 2.5))
+                reg_status = regime_detector.get_regime()
+                
+                if reg_status["regime"] == "VOLATILE":
+                    await asyncio.sleep(1)
+                    continue # Pause bot if highly volatile
+                
                 new_opportunities = []
                 for g in gaps:
                     confidence = classifier_instance.predict_confidence({
