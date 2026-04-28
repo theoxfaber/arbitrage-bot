@@ -38,3 +38,8 @@ backend/arbitrage.db
 .DS_Store
 
 backend/rust-engine/target/
+
+
+# Added by cargo
+
+/target
