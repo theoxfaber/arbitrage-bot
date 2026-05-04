@@ -1,0 +1,10 @@
+[package]
+name = "arb-ml"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+arb-engine = { path = "../engine" }
+serde = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }

@@ -1,0 +1,25 @@
+[package]
+name = "arb-server"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "arbitrage-bot"
+path = "src/main.rs"
+
+[dependencies]
+arb-engine = { path = "../engine" }
+arb-ml = { path = "../ml" }
+arb-db = { path = "../db" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+anyhow = { workspace = true }
+axum = { version = "0.8", features = ["ws"] }
+tower-http = { version = "0.6", features = ["cors"] }
+dotenvy = "0.15"
+futures-util = "0.3"

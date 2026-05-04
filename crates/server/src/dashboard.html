@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arbitrage Bot — Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'SF Mono', 'Fira Code', monospace; background: #0a0a0f; color: #e0e0e8; min-height: 100vh; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+        h1 { font-size: 1.5rem; color: #7c3aed; margin-bottom: 0.25rem; }
+        .subtitle { color: #6b7280; font-size: 0.8rem; margin-bottom: 2rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .card { background: #111119; border: 1px solid #1e1e2e; border-radius: 12px; padding: 1.25rem; }
+        .card-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: #6b7280; margin-bottom: 0.5rem; }
+        .card-value { font-size: 1.75rem; font-weight: 700; }
+        .green { color: #10b981; }
+        .purple { color: #7c3aed; }
+        .amber { color: #f59e0b; }
+        .red { color: #ef4444; }
+        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; animation: pulse 2s infinite; }
+        .status-dot.active { background: #10b981; }
+        .status-dot.inactive { background: #ef4444; animation: none; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .btn { padding: 0.5rem 1.25rem; border: none; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 0.8rem; font-weight: 600; transition: all 0.2s; }
+        .btn-start { background: #10b981; color: #000; }
+        .btn-stop { background: #ef4444; color: #fff; }
+        .btn:hover { transform: translateY(-1px); filter: brightness(1.1); }
+        .controls { margin-bottom: 2rem; display: flex; gap: 0.75rem; align-items: center; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        th { text-align: left; padding: 0.75rem; color: #6b7280; border-bottom: 1px solid #1e1e2e; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        td { padding: 0.75rem; border-bottom: 1px solid #111119; }
+        .section-title { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; color: #c4b5fd; }
+        .ws-status { font-size: 0.7rem; color: #6b7280; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚡ Arbitrage Engine</h1>
+        <p class="subtitle">Multi-exchange arbitrage detection • Rust/Tokio</p>
+
+        <div class="controls">
+            <button class="btn btn-start" onclick="startBot()">▶ Start</button>
+            <button class="btn btn-stop" onclick="stopBot()">■ Stop</button>
+            <span id="ws-status" class="ws-status">Connecting...</span>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <div class="card-label">Status</div>
+                <div class="card-value" id="status"><span class="status-dot inactive"></span>Offline</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Total Profit</div>
+                <div class="card-value green" id="profit">$0.00</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Trades</div>
+                <div class="card-value purple" id="trades">0</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Win Rate</div>
+                <div class="card-value amber" id="winrate">0%</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Regime</div>
+                <div class="card-value" id="regime">CALM</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Uptime</div>
+                <div class="card-value" id="uptime">—</div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 2rem;">
+            <div class="section-title">Live Opportunities</div>
+            <table>
+                <thead><tr><th>Symbol</th><th>Buy</th><th>Sell</th><th>Spread</th><th>Confidence</th><th>Est. Profit</th></tr></thead>
+                <tbody id="opps-table"><tr><td colspan="6" style="color:#6b7280;text-align:center;">Waiting for data...</td></tr></tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <div class="section-title">Recent Trades</div>
+            <table>
+                <thead><tr><th>Time</th><th>Symbol</th><th>Strategy</th><th>Exchanges</th><th>Profit</th><th>Status</th></tr></thead>
+                <tbody id="trades-table"><tr><td colspan="6" style="color:#6b7280;text-align:center;">No trades yet</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const BASE = window.location.origin;
+        const WS_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/feed`;
+
+        function connectWS() {
+            const ws = new WebSocket(WS_URL);
+            const statusEl = document.getElementById('ws-status');
+
+            ws.onopen = () => { statusEl.textContent = '● WebSocket connected'; statusEl.style.color = '#10b981'; };
+            ws.onclose = () => { statusEl.textContent = '○ Reconnecting...'; statusEl.style.color = '#f59e0b'; setTimeout(connectWS, 3000); };
+            ws.onmessage = (e) => {
+                try {
+                    const msg = JSON.parse(e.data);
+                    if (msg.type === 'opportunities') renderOpps(msg.payload);
+                } catch(_) {}
+            };
+        }
+
+        function renderOpps(opps) {
+            const tbody = document.getElementById('opps-table');
+            if (!opps || opps.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="color:#6b7280;text-align:center;">No opportunities detected</td></tr>';
+                return;
+            }
+            tbody.innerHTML = opps.slice(0, 10).map(o => `
+                <tr>
+                    <td>${o.gap?.symbol || o.symbol || '—'}</td>
+                    <td>${o.gap?.buy_exchange || '—'}</td>
+                    <td>${o.gap?.sell_exchange || '—'}</td>
+                    <td class="green">${((o.gap?.spread || 0) * 100).toFixed(3)}%</td>
+                    <td>${(o.confidence * 100).toFixed(1)}%</td>
+                    <td class="green">$${(o.expected_profit_usd || 0).toFixed(2)}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function poll() {
+            try {
+                const res = await fetch(`${BASE}/bot/status`);
+                const data = await res.json();
+                document.getElementById('status').innerHTML = data.running
+                    ? '<span class="status-dot active"></span>Running'
+                    : '<span class="status-dot inactive"></span>Offline';
+                document.getElementById('profit').textContent = `$${data.total_profit.toFixed(2)}`;
+                document.getElementById('trades').textContent = data.total_trades;
+                document.getElementById('winrate').textContent = `${(data.win_rate * 100).toFixed(0)}%`;
+                document.getElementById('regime').textContent = data.regime;
+                document.getElementById('uptime').textContent = data.running ? `${data.uptime_secs}s` : '—';
+
+                const tRes = await fetch(`${BASE}/trades/history`);
+                const trades = await tRes.json();
+                const tbody = document.getElementById('trades-table');
+                if (trades.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="color:#6b7280;text-align:center;">No trades yet</td></tr>';
+                } else {
+                    tbody.innerHTML = trades.slice(0, 10).map(t => `
+                        <tr>
+                            <td>${new Date(t.timestamp).toLocaleTimeString()}</td>
+                            <td>${t.symbol}</td>
+                            <td>${t.strategy}</td>
+                            <td>${t.exchanges}</td>
+                            <td class="${t.profit >= 0 ? 'green' : 'red'}">$${t.profit.toFixed(2)}</td>
+                            <td>${t.status}</td>
+                        </tr>
+                    `).join('');
+                }
+            } catch(e) { console.error('Poll error:', e); }
+        }
+
+        async function startBot() { await fetch(`${BASE}/bot/start`, { method: 'POST' }); poll(); }
+        async function stopBot() { await fetch(`${BASE}/bot/stop`, { method: 'POST' }); poll(); }
+
+        connectWS();
+        poll();
+        setInterval(poll, 3000);
+    </script>
+</body>
+</html>
