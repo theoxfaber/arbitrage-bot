@@ -18,13 +18,20 @@ pub async fn run_binance_feed(book: Arc<OrderBook>, symbols: Vec<String>) {
         .iter()
         .map(|s| format!("{}@bookTicker", s.to_lowercase()))
         .collect();
-    let url = format!("wss://stream.binance.com:9443/stream?streams={}", streams.join("/"));
+    let url = format!(
+        "wss://stream.binance.com:9443/stream?streams={}",
+        streams.join("/")
+    );
 
     loop {
         info!(exchange = "binance", "Connecting to WebSocket feed...");
         match tokio_tungstenite::connect_async(&url).await {
             Ok((mut ws, _)) => {
-                info!(exchange = "binance", "Connected — streaming {} symbols", symbols.len());
+                info!(
+                    exchange = "binance",
+                    "Connected — streaming {} symbols",
+                    symbols.len()
+                );
 
                 while let Some(msg) = ws.next().await {
                     match msg {
@@ -65,9 +72,9 @@ struct BinanceStreamWrapper {
 
 #[derive(Deserialize)]
 struct BinanceBookTicker {
-    s: String,  // Symbol
-    b: String,  // Best bid price
-    a: String,  // Best ask price
+    s: String, // Symbol
+    b: String, // Best bid price
+    a: String, // Best ask price
 }
 
 fn parse_binance_ticker(raw: &str) -> Option<Ticker> {

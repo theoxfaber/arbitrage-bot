@@ -20,13 +20,14 @@ pub async fn run_bybit_feed(book: Arc<OrderBook>, symbols: Vec<String>) {
         info!(exchange = "bybit", "Connecting to WebSocket feed...");
         match tokio_tungstenite::connect_async(url).await {
             Ok((mut ws, _)) => {
-                info!(exchange = "bybit", "Connected — subscribing to {} symbols", symbols.len());
+                info!(
+                    exchange = "bybit",
+                    "Connected — subscribing to {} symbols",
+                    symbols.len()
+                );
 
                 // Subscribe to tickers
-                let args: Vec<String> = symbols
-                    .iter()
-                    .map(|s| format!("tickers.{s}"))
-                    .collect();
+                let args: Vec<String> = symbols.iter().map(|s| format!("tickers.{s}")).collect();
                 let sub_msg = serde_json::json!({
                     "op": "subscribe",
                     "args": args,

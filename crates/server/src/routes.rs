@@ -49,7 +49,10 @@ pub async fn get_status(State(state): State<AppState>) -> Json<BotStatusResponse
 pub async fn start_bot(State(state): State<AppState>) -> impl IntoResponse {
     let mut running = state.is_running.write().await;
     if *running {
-        return (StatusCode::CONFLICT, Json(serde_json::json!({"error": "Already running"})));
+        return (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({"error": "Already running"})),
+        );
     }
     *running = true;
     *state.start_time.write().await = Some(Utc::now());

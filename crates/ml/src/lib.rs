@@ -176,7 +176,10 @@ mod tests {
         let classifier = GapClassifier::new(0.5);
         let gap = make_gap(0.005); // 0.5% spread
         let confidence = classifier.predict_confidence(&gap);
-        assert!(confidence >= 0.5, "Large spread should yield high confidence");
+        assert!(
+            confidence >= 0.5,
+            "Large spread should yield high confidence"
+        );
     }
 
     #[test]

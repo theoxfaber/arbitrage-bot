@@ -88,11 +88,7 @@ impl Default for ExchangeConfig {
         Self {
             binance_fee: 0.001,
             bybit_fee: 0.001,
-            pairs: vec![
-                "BTCUSDT".into(),
-                "ETHUSDT".into(),
-                "SOLUSDT".into(),
-            ],
+            pairs: vec!["BTCUSDT".into(), "ETHUSDT".into(), "SOLUSDT".into()],
             min_spread_pct: 0.05,
         }
     }

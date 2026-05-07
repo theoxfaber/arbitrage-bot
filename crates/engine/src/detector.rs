@@ -16,11 +16,7 @@ pub struct Detector {
 }
 
 impl Detector {
-    pub fn new(
-        book: Arc<OrderBook>,
-        config: ExchangeConfig,
-        gap_tx: mpsc::Sender<Gap>,
-    ) -> Self {
+    pub fn new(book: Arc<OrderBook>, config: ExchangeConfig, gap_tx: mpsc::Sender<Gap>) -> Self {
         Self {
             book,
             config,
@@ -31,7 +27,10 @@ impl Detector {
     /// Run the detection loop. Polls the orderbook every 5ms for cross-exchange
     /// price discrepancies. This is the hot path — kept allocation-free.
     pub async fn run(&self) {
-        info!("Detector started — scanning {} pairs", self.config.pairs.len());
+        info!(
+            "Detector started — scanning {} pairs",
+            self.config.pairs.len()
+        );
 
         loop {
             for symbol in &self.config.pairs {

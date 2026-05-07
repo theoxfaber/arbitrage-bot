@@ -63,12 +63,7 @@ impl Database {
     /// Get the most recent N trades.
     pub async fn recent_trades(&self, limit: usize) -> Vec<Trade> {
         let trades = self.trades.read().await;
-        trades
-            .iter()
-            .rev()
-            .take(limit)
-            .cloned()
-            .collect()
+        trades.iter().rev().take(limit).cloned().collect()
     }
 
     /// Get performance history.
